@@ -1,0 +1,6 @@
+[submodule "cutest"]
+	path = cutest
+	url = git@github.com:mity/cutest.git
+[submodule "external/cutest"]
+	path = external/cutest
+	url = git@github.com:mity/cutest.git
