@@ -32,6 +32,7 @@ static inline uint32_t valpow2(uint32_t p2) { return 1LU << p2; }
 int buffy_tx(struct buffy* t, const char* buf, int len) {
   int pos = 0;
   DEBUG_PRINTF("tx: %d\n", len);
+  memory_barrier();
   while (pos < len) {
     // Make a local copy of tail and head, as the debug reader could modify
     // the tail and mess up our calculations.
@@ -79,6 +80,7 @@ int buffy_tx(struct buffy* t, const char* buf, int len) {
 int buffy_rx(struct buffy* t, char* buf, int len) {
   int pos = 0;
   DEBUG_PRINTF("rx: %d\n", len);
+  memory_barrier();
   while (pos < len) {
     // Make a local copy of tail and head, as the debug writer could modify
     // the head and mess up our calculations.
