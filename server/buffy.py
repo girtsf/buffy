@@ -27,7 +27,7 @@ class Buffy:
         self._rpc = rpc
         self._verbose = verbose
 
-        if (not ram_start or not ram_size) and (not buffy_address):
+        if (ram_start is None or ram_size is None) and (buffy_address is None):
             raise ValueError(
                 'Either buffy_address or ram_start & ram_size must'
                 ' be provided')
@@ -129,6 +129,7 @@ class Buffy:
 
 if __name__ == '__main__':
     rpc = openocd_rpc.OpenOcdRpc()
+    # TODO: command line flags + rc.
     ram_start = 0x20000000
     ram_size = 0x2000
     buffy = Buffy(rpc, ram_start=ram_start, ram_size=ram_size, verbose=True)
