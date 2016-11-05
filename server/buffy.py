@@ -2,6 +2,7 @@
 #
 # Interface to buffy terminal through OpenOCD's RPC server.
 
+import sys
 import time
 
 import openocd_rpc
@@ -119,18 +120,19 @@ class Buffy:
                     self._buffy_address + TX_BUF_OFFSET + tail,
                     read_len,
                     width=8)
-                print(''.join([chr(x) for x in buf]))
+                sys.stdout.buffer.write(bytes(buf))
+                sys.stdout.buffer.flush()
                 new_tail = (tail + len(buf)) % self._tx_buf_size
                 self._set_tx_tail(new_tail)
                 continue
 
-            time.sleep(0.5)
+            time.sleep(1)
 
 
 if __name__ == '__main__':
     rpc = openocd_rpc.OpenOcdRpc()
     # TODO: command line flags + rc.
-    ram_start = 0x20000000
+    ram_start = 0x10000000
     ram_size = 0x2000
-    buffy = Buffy(rpc, ram_start=ram_start, ram_size=ram_size, verbose=True)
+    buffy = Buffy(rpc, ram_start=ram_start, ram_size=ram_size, verbose=False)
     buffy.watch()

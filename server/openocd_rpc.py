@@ -63,7 +63,11 @@ class OpenOcdRpc:
         self.send_command('ocd_mww 0x%x 0x%x' % (address, value))
 
     def read_memory(self, address, count, width=32):
-        """Reads count elements with given width starting from address."""
+        """Reads count elements with given width starting from address.
+
+        Returns:
+            list of ints, whose width depends on the 'width' argument
+        """
         # Unset array first, otherwise, if count is smaller, it will return previous values.
         self.send_command('array unset output')
         self.send_command('mem2array output %d 0x%x %d' %
