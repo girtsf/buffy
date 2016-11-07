@@ -3,14 +3,19 @@
 # Interface to buffy terminal through OpenOCD's RPC server.
 
 import sys
+import threading
 import time
 
+import console
 import openocd_rpc
 
 
 BUFFY_MAGIC = 0xdd664662
+
 TX_TAIL_OFFSET = 12
 TX_HEAD_OFFSET = 16
+RX_TAIL_OFFSET = 20
+RX_HEAD_OFFSET = 24
 TX_BUF_OFFSET = 28
 
 
@@ -25,6 +30,9 @@ class Buffy:
                  ram_size=None,
                  buffy_address=None,
                  verbose=False):
+        self._alive = False
+        self._console_reader_thread = None
+        self._console = console.Console()
         self._rpc = rpc
         self._verbose = verbose
 
@@ -80,6 +88,19 @@ class Buffy:
         """Returns current head value."""
         return self._rpc.read_word(self._buffy_address + TX_HEAD_OFFSET)
 
+    def _get_rx_tail(self):
+        """Returns current rx tail value."""
+        return self._rpc.read_word(self._buffy_address + RX_TAIL_OFFSET)
+
+    def _set_rx_head(self, value):
+        """Sets rx head value."""
+        return self._rpc.write_word(self._buffy_address + RX_HEAD_OFFSET,
+                                    value)
+
+    def _get_rx_head(self):
+        """Returns current rx head value."""
+        return self._rpc.read_word(self._buffy_address + RX_HEAD_OFFSET)
+
     def pchr(self, i):
         if i > 32 and i < 128:
             return chr(i)
@@ -104,8 +125,78 @@ class Buffy:
             s += self.d(word)
         print(s)
 
+    def buffy_write(self, buf):
+        """Writes given byte(s) to buffy."""
+        # TODO: synchronize openocd access.
+        while buf:
+            tail = self._get_rx_tail()
+            head = self._get_rx_head()
+            if self._verbose:
+                print('RX tail: %d head: %d' % (tail, head))
+            if head >= tail:
+                # Write to the end of the buffer.
+                write_len = self._rx_buf_size - head
+                if tail == 0:
+                    # Special case - don't write all the way to the end.
+                    write_len -= 1
+            else:
+                write_len = tail - head - 1
+            if write_len == 0:
+                print('WARNING: RX buffer full')
+                return
+            write_len = min(write_len, len(buf))
+            if self._verbose:
+                print('Writing %d bytes' % write_len)
+            buf_to_write = buf[:write_len]
+
+            rx_buf_address = self._buffy_address + TX_BUF_OFFSET + self._tx_buf_size
+            self._rpc.write_memory(rx_buf_address + head, buf_to_write, width=8)
+
+            new_rx_head = (head + write_len) % self._rx_buf_size
+            self._set_rx_head(new_rx_head)
+
+            buf = buf[write_len:]
+
+    def start(self):
+        self._alive = True
+        self._console.setup()
+        self._start_console_reader()
+
+    def join(self):
+        self.watch()
+        self._console_reader_thread.join()
+
+    def _start_console_reader(self):
+        self._console_reader_thread = threading.Thread(target=self._console_reader, name='console_reader')
+        self._console_reader_thread.daemon = True
+        self._console_reader_thread.start()
+
+    def _console_reader(self):
+        """Reads input from console, sends to buffy.
+
+        _console_reader runs in a separate thread, reading characters
+        from console, sending them to buffy.
+
+        Exits if self._alive goes False.
+        """
+        while self._alive:
+            try:
+                c = self._console.getkey()
+            except KeyboardInterrupt:
+                self._alive = False
+                break
+            if ord(c) == 3:
+                # CTRL-C (end of text)
+                print('CTRL-C')
+                self._alive = False
+                break
+            # TODO: maybe split out buffy and buffy_term?
+            self.buffy_write(c.encode('utf-8'))
+            # echo
+            self._console.write(c)
+
     def watch(self):
-        while True:
+        while self._alive:
             tail = self._get_tx_tail()
             head = self._get_tx_head()
             if tail != head:
@@ -135,4 +226,5 @@ if __name__ == '__main__':
     ram_start = 0x10000000
     ram_size = 0x2000
     buffy = Buffy(rpc, ram_start=ram_start, ram_size=ram_size, verbose=False)
-    buffy.watch()
+    buffy.start()
+    buffy.join()

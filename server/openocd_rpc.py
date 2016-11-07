@@ -69,10 +69,10 @@ class OpenOcdRpc:
             list of ints, whose width depends on the 'width' argument
         """
         # Unset array first, otherwise, if count is smaller, it will return previous values.
-        self.send_command('array unset output')
-        self.send_command('mem2array output %d 0x%x %d' %
+        self.send_command('array unset _rpc_array')
+        self.send_command('mem2array _rpc_array %d 0x%x %d' %
                           (width, address, count))
-        mem_bytes_hex = self.send_command('ocd_echo $output')
+        mem_bytes_hex = self.send_command('ocd_echo $_rpc_array')
         # The return value is pairs of <array index> <value>. The array indices
         # are not neccessarily in order. (Yay TCL!)
         items = mem_bytes_hex.split(b' ')
@@ -84,3 +84,19 @@ class OpenOcdRpc:
         pairs = sorted(zip(items[::2], items[1::2]))
         # Now that they are sorted, return an array of second elements (values).
         return [y for x, y in pairs]
+
+    def write_memory(self, address, values, width=32):
+        """Writes to memory.
+
+        Args:
+            address: int, address to write to
+            values: list of ints
+            width: int, write width in bits
+        """
+        array = ' '.join(['%d 0x%x' % (index, value)
+                         for index, value in enumerate(values)])
+        count = len(values)
+        self.send_command('array unset _rpc_array')
+        self.send_command('array set _rpc_array { %s }' % array)
+        self.send_command('array2mem _rpc_array %d 0x%x %d' %
+                          (width, address, count))
