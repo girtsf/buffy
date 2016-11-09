@@ -16,7 +16,8 @@ TX_TAIL_OFFSET = 12
 TX_HEAD_OFFSET = 16
 RX_TAIL_OFFSET = 20
 RX_HEAD_OFFSET = 24
-TX_BUF_OFFSET = 28
+TX_OVERFLOW_COUNTER = 28
+TX_BUF_OFFSET = 32
 
 
 class BuffyError(Exception):
@@ -100,6 +101,10 @@ class Buffy:
     def _get_rx_head(self):
         """Returns current rx head value."""
         return self._rpc.read_word(self._buffy_address + RX_HEAD_OFFSET)
+
+    def _get_tx_overflow_counter(self):
+        """Returns current tx overflow counter value."""
+        return self._rpc.read_word(self._buffy_address + TX_OVERFLOW_COUNTER)
 
     def pchr(self, i):
         if i > 32 and i < 128:
@@ -196,6 +201,8 @@ class Buffy:
             self._console.write(c)
 
     def watch(self):
+        prev_overflow_counter = self._get_tx_overflow_counter()
+
         while self._alive:
             tail = self._get_tx_tail()
             head = self._get_tx_head()
@@ -217,7 +224,13 @@ class Buffy:
                 self._set_tx_tail(new_tail)
                 continue
 
-            time.sleep(1)
+            overflow_counter = self._get_tx_overflow_counter()
+            overflow_delta = overflow_counter - prev_overflow_counter
+            if overflow_delta:
+                print('TX side overflowed %d times!' % overflow_delta)
+                prev_overflow_counter = overflow_counter
+
+            time.sleep(0.2)
 
 
 if __name__ == '__main__':

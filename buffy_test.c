@@ -24,12 +24,16 @@ void test_tx(void) {
   TEST_CHECK(buffy.tx_head == 8);
   TEST_CHECK(buffy.tx_tail == 0);
 
+  TEST_EQ(buffy.tx_overflow_counter, 0);
   TEST_EQ(buffy_tx(&buffy, "123456789abcdef", 16), 16 - 5 - 3 - 1);
+  TEST_EQ(buffy.tx_overflow_counter, 1);
 
   TEST_EQ(buffy_tx(&buffy, "123456789abcdef", 16), 0);
+  TEST_EQ(buffy.tx_overflow_counter, 2);
 
   buffy.tx_tail = 1;
   TEST_EQ(buffy_tx(&buffy, "123456789abcdef", 16), 1);
+  TEST_EQ(buffy.tx_overflow_counter, 3);
 }
 
 void test_rx(void) {

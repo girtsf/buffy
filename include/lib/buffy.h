@@ -24,6 +24,7 @@ struct buffy {
   volatile uint32_t tx_head;
   volatile uint32_t rx_tail;
   volatile uint32_t rx_head;
+  volatile uint32_t tx_overflow_counter;
   // Buffers themselves.
   uint8_t tx_buf[BUFFY_TX_BUF_SIZE];
   uint8_t rx_buf[BUFFY_RX_BUF_SIZE];
@@ -49,4 +50,5 @@ int buffy_rx(struct buffy* t, char* buf, int len);
       .tx_head = 0,                                             \
       .rx_tail = 0,                                             \
       .rx_head = 0,                                             \
+      .tx_overflow_counter = 0,                                 \
   };

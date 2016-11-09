@@ -56,6 +56,8 @@ int buffy_tx(struct buffy* t, const char* buf, int len) {
     }
     if (write_len == 0) {
       // Full.
+      t->tx_overflow_counter++;
+      memory_barrier();
       break;
     }
     write_len = min(write_len, len - pos);
