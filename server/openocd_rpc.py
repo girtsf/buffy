@@ -5,6 +5,7 @@
 # See: http://openocd.org/doc/html/Tcl-Scripting-API.html
 
 import socket
+import threading
 
 # Input and output terminator.
 CMD_TERMINATOR = b'\x1a'
@@ -18,11 +19,17 @@ class OpenOcdError(Exception):
 
 class OpenOcdRpc:
     def __init__(self, port=DEFAULT_PORT):
-        self._sock = socket.create_connection(('localhost', port))
+        # Timeout of 1s.
+        self._sock = socket.create_connection(('localhost', port), 1)
         self._remaining_buffer_bytes = None
+        self._lock = threading.Lock()
 
     def send_command(self, cmd):
         """Sends given command, returns the response as bytes."""
+        with self._lock:
+            return self._send_command_locked(cmd)
+
+    def _send_command_locked(self, cmd):
         cmd = cmd.encode('utf-8') + CMD_TERMINATOR
         self._sock.send(cmd)
         received = []
@@ -33,6 +40,8 @@ class OpenOcdRpc:
                 self._remaining_buffer_bytes = None
             else:
                 tmp = self._sock.recv(1024)
+                if not tmp:
+                    raise OpenOcdError('Socket read failed')
             if CMD_TERMINATOR in tmp:
                 # We have a response.
                 cmd_part, rest = tmp.split(CMD_TERMINATOR, 1)
@@ -55,7 +64,7 @@ class OpenOcdRpc:
                                (address, out))
         address_out, value = out.split(b':')
         if int(address_out, 0) != address:
-            raise OpenOcdError('Unexpected address: %s' % addreses_out)
+            raise OpenOcdError('Unexpected address: %s' % address_out)
         return int(value, 16)
 
     def write_word(self, address, value):
