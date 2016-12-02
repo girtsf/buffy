@@ -172,9 +172,17 @@ class Buffy:
         self._console_reader_thread.join()
 
     def _start_console_reader(self):
-        self._console_reader_thread = threading.Thread(target=self._console_reader, name='console_reader')
+        self._console_reader_thread = threading.Thread(target=self._console_reader_start, name='console_reader')
         self._console_reader_thread.daemon = True
         self._console_reader_thread.start()
+
+    def _console_reader_start(self):
+        try:
+            self._console_reader()
+        finally:
+            # If reader thread stops or dies, make watcher also die.
+            print('console reader thread exited')
+            self._alive = False
 
     def _console_reader(self):
         """Reads input from console, sends to buffy.
@@ -230,13 +238,13 @@ class Buffy:
                 print('TX side overflowed %d times!' % overflow_delta)
                 prev_overflow_counter = overflow_counter
 
-            time.sleep(0.2)
+            time.sleep(0.5)
 
 
 if __name__ == '__main__':
     rpc = openocd_rpc.OpenOcdRpc()
     # TODO: command line flags + rc.
-    ram_start = 0x10000000
+    ram_start = 0x20000000  # stm32f0
     ram_size = 0x2000
     buffy = Buffy(rpc, ram_start=ram_start, ram_size=ram_size, verbose=False)
     buffy.start()
