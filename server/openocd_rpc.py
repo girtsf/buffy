@@ -64,7 +64,8 @@ class OpenOcdRpc:
                                (address, out))
         address_out, value = out.split(b':')
         if int(address_out, 0) != address:
-            raise OpenOcdError('Unexpected address: %s' % address_out)
+            raise OpenOcdError('Unexpected address: %s, wanted: 0x%x' %
+                               (address_out, address))
         return int(value, 16)
 
     def write_word(self, address, value):
@@ -103,7 +104,7 @@ class OpenOcdRpc:
             width: int, write width in bits
         """
         array = ' '.join(['%d 0x%x' % (index, value)
-                         for index, value in enumerate(values)])
+                          for index, value in enumerate(values)])
         count = len(values)
         self.send_command('array unset _rpc_array')
         self.send_command('array set _rpc_array { %s }' % array)
