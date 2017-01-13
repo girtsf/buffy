@@ -2,13 +2,22 @@
 #
 # Interface to buffy terminal through OpenOCD's RPC server.
 
+import argparse
 import sys
 import threading
 import time
+import os
 
+# Local imports.
 import console
 import openocd_rpc
 import tcp_server
+
+# Path to store previous location of buffy on target.
+BUFFY_PREVIOUS_ADDRESS_FILE = os.path.expanduser('~/.buffy_previous_address')
+
+DEFAULT_RAM_START = 0x10000000
+DEFAULT_RAM_SIZE = 128 * 1024
 
 TCP_PORT = 5123
 
@@ -53,13 +62,44 @@ class Buffy:
         header = rpc.read_memory(self._buffy_address, 3)  # 3 words
         self._parse_header(header)
 
+    @staticmethod
+    def _read_previous_address():
+        """Returns previous buffy address or None."""
+        if not os.path.exists(BUFFY_PREVIOUS_ADDRESS_FILE):
+            return None
+        with open(BUFFY_PREVIOUS_ADDRESS_FILE) as fh:
+            address_string = fh.read()
+        if not address_string:
+            return None
+        try:
+            address = int(address_string, 0)
+        except ValueError:
+            return None
+
+        return address
+
+    @staticmethod
+    def _write_previous_address(address):
+        with open(BUFFY_PREVIOUS_ADDRESS_FILE, 'w') as fh:
+            fh.write('0x%x' % address)
+
     def _find_magic(self, ram_start, ram_size):
         """Looks for BUFFY_MAGIC in ram, returns first address."""
+        previous_address = self._read_previous_address()
+        if previous_address is not None:
+            v = self._rpc.read_word(previous_address)
+            if v == BUFFY_MAGIC:
+                if self._verbose:
+                    print('Found magic at previous location 0x%x' %
+                          previous_address)
+                return previous_address
+
         for i in range(0, ram_size, 4):
             v = self._rpc.read_word(ram_start + i)
             if v == BUFFY_MAGIC:
                 if self._verbose:
                     print('Found magic at 0x%x' % i)
+                self._write_previous_address(ram_start + i)
                 return ram_start + i
         raise BuffyError('Could not find magic word')
 
@@ -248,16 +288,28 @@ class Buffy:
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--ram_start',
+        type=lambda x: int(x, 0),
+        default=DEFAULT_RAM_START,
+        help='RAM starting address')
+    parser.add_argument(
+        '--ram_size',
+        type=lambda x: int(x, 0),
+        default=DEFAULT_RAM_SIZE,
+        help='Size of RAM')
+    parser.add_argument(
+        '--start_command',
+        action='append',
+        help='Command(s) to execute in the beginning')
+    args = parser.parse_args()
+
     rpc = openocd_rpc.OpenOcdRpc()
-    if len(sys.argv) > 1:
-        ram_start = int(sys.argv[1], 0)
-    else:
-        ram_start = 0x10000000
-        # ram_start = 0x20000000  # stm32f0
-    if len(sys.argv) > 2:
-        ram_size = int(sys.argv[2], 0)
-    else:
-        ram_size = 128 * 1024
-    buffy = Buffy(rpc, ram_start=ram_start, ram_size=ram_size, verbose=False)
+    if args.start_command:
+        for command in args.start_command:
+            rpc.send_command(command)
+    buffy = Buffy(
+        rpc, ram_start=args.ram_start, ram_size=args.ram_size, verbose=False)
     buffy.start()
     buffy.join()
