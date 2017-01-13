@@ -55,8 +55,12 @@ class OpenOcdRpc:
         return out
 
     def read_word(self, address):
+        with self._lock:
+            return self._read_word_locked(address)
+
+    def _read_word_locked(self, address):
         """Reads a 32-bit word from given address."""
-        out = self.send_command('ocd_mdw 0x%x' % address)
+        out = self._send_command_locked('ocd_mdw 0x%x' % address)
         # Return format:
         # 0x20002000: 00000000
         if out.count(b':') != 1:
@@ -69,20 +73,28 @@ class OpenOcdRpc:
         return int(value, 16)
 
     def write_word(self, address, value):
-        """Writes a 32-bit value to a given address."""
-        self.send_command('ocd_mww 0x%x 0x%x' % (address, value))
+        with self._lock:
+            return self._write_word_locked(address, value)
 
-    def read_memory(self, address, count, width=32):
+    def _write_word_locked(self, address, value):
+        """Writes a 32-bit value to a given address."""
+        self._send_command_locked('ocd_mww 0x%x 0x%x' % (address, value))
+
+    def read_memory(self, *args, **kwargs):
+        with self._lock:
+            return self._read_memory_locked(*args, **kwargs)
+
+    def _read_memory_locked(self, address, count, width=32):
         """Reads count elements with given width starting from address.
 
         Returns:
             list of ints, whose width depends on the 'width' argument
         """
         # Unset array first, otherwise, if count is smaller, it will return previous values.
-        self.send_command('array unset _rpc_array')
-        self.send_command('mem2array _rpc_array %d 0x%x %d' %
-                          (width, address, count))
-        mem_bytes_hex = self.send_command('ocd_echo $_rpc_array')
+        self._send_command_locked('array unset _rpc_array')
+        self._send_command_locked('mem2array _rpc_array %d 0x%x %d' %
+                                  (width, address, count))
+        mem_bytes_hex = self._send_command_locked('ocd_echo $_rpc_array')
         # The return value is pairs of <array index> <value>. The array indices
         # are not neccessarily in order. (Yay TCL!)
         items = mem_bytes_hex.split(b' ')
@@ -95,7 +107,11 @@ class OpenOcdRpc:
         # Now that they are sorted, return an array of second elements (values).
         return [y for x, y in pairs]
 
-    def write_memory(self, address, values, width=32):
+    def write_memory(self, *args, **kwargs):
+        with self._lock:
+            return self._write_memory_locked(*args, **kwargs)
+
+    def _write_memory_locked(self, address, values, width=32):
         """Writes to memory.
 
         Args:
@@ -106,7 +122,7 @@ class OpenOcdRpc:
         array = ' '.join(['%d 0x%x' % (index, value)
                           for index, value in enumerate(values)])
         count = len(values)
-        self.send_command('array unset _rpc_array')
-        self.send_command('array set _rpc_array { %s }' % array)
-        self.send_command('array2mem _rpc_array %d 0x%x %d' %
-                          (width, address, count))
+        self._send_command_locked('array unset _rpc_array')
+        self._send_command_locked('array set _rpc_array { %s }' % array)
+        self._send_command_locked('array2mem _rpc_array %d 0x%x %d' %
+                                  (width, address, count))
