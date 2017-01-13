@@ -6,6 +6,8 @@
 
 import socket
 import threading
+import time
+import traceback
 
 # Input and output terminator.
 CMD_TERMINATOR = b'\x1a'
@@ -18,11 +20,41 @@ class OpenOcdError(Exception):
 
 
 class OpenOcdRpc:
-    def __init__(self, port=DEFAULT_PORT):
+    def __init__(self, port=DEFAULT_PORT, prepare_commands=None, tries=1):
+        """Initializes openocd interface.
+
+        Args:
+          port: int, TCP port to connect to
+          prepare_commands: list of str, if specified, gets executed
+              before we start sending commands (or after an error)
+          tries: int, number of tries to do before giving up.
+        """
+        self._prepare_commands = prepare_commands or []
+        self._tries = tries
+        self._wait_between_tries = 1  # seconds
+        # Whether we have sent the prepare commands.
+        self._prepared = False
+
         # Timeout of 1s.
         self._sock = socket.create_connection(('localhost', port), 1)
         self._remaining_buffer_bytes = None
         self._lock = threading.Lock()
+
+    def _maybe_retry(self, cmd, *args, **kwargs):
+        """If self._tries > 1, handles BuffyError retries."""
+        tries_left = self._tries
+        while tries_left:
+            try:
+                return cmd(*args, **kwargs)
+            except OpenOcdError as e:
+                self._prepared = False
+                tries_left -= 1
+                if not tries_left:
+                    raise
+                traceback.print_exc()
+                print('Waiting for %d s before retrying %d more time(s)' %
+                      (self._wait_between_tries, tries_left))
+                time.sleep(self._wait_between_tries)
 
     def send_command(self, cmd):
         """Sends given command, returns the response as bytes."""
@@ -30,6 +62,13 @@ class OpenOcdRpc:
             return self._send_command_locked(cmd)
 
     def _send_command_locked(self, cmd):
+        if not self._prepared:
+            for command in self._prepare_commands:
+                self._send_command_locked_real(command)
+        self._prepared = True
+        return self._send_command_locked_real(cmd)
+
+    def _send_command_locked_real(self, cmd):
         cmd = cmd.encode('utf-8') + CMD_TERMINATOR
         self._sock.send(cmd)
         received = []
@@ -56,7 +95,7 @@ class OpenOcdRpc:
 
     def read_word(self, address):
         with self._lock:
-            return self._read_word_locked(address)
+            return self._maybe_retry(self._read_word_locked, address)
 
     def _read_word_locked(self, address):
         """Reads a 32-bit word from given address."""
@@ -74,7 +113,7 @@ class OpenOcdRpc:
 
     def write_word(self, address, value):
         with self._lock:
-            return self._write_word_locked(address, value)
+            return self._maybe_retry(self._write_word_locked, address, value)
 
     def _write_word_locked(self, address, value):
         """Writes a 32-bit value to a given address."""
@@ -82,7 +121,7 @@ class OpenOcdRpc:
 
     def read_memory(self, *args, **kwargs):
         with self._lock:
-            return self._read_memory_locked(*args, **kwargs)
+            return self._maybe_retry(self._read_memory_locked, *args, **kwargs)
 
     def _read_memory_locked(self, address, count, width=32):
         """Reads count elements with given width starting from address.
@@ -109,7 +148,8 @@ class OpenOcdRpc:
 
     def write_memory(self, *args, **kwargs):
         with self._lock:
-            return self._write_memory_locked(*args, **kwargs)
+            return self._maybe_retry(self._write_memory_locked, *args, **
+                                     kwargs)
 
     def _write_memory_locked(self, address, values, width=32):
         """Writes to memory.

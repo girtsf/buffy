@@ -300,15 +300,15 @@ if __name__ == '__main__':
         default=DEFAULT_RAM_SIZE,
         help='Size of RAM')
     parser.add_argument(
-        '--start_command',
+        '--prepare_command',
         action='append',
         help='Command(s) to execute in the beginning')
+    parser.add_argument(
+        '--tries', type=int, default=1, help='Number of retries on error')
     args = parser.parse_args()
 
-    rpc = openocd_rpc.OpenOcdRpc()
-    if args.start_command:
-        for command in args.start_command:
-            rpc.send_command(command)
+    rpc = openocd_rpc.OpenOcdRpc(
+        prepare_commands=args.prepare_command, tries=args.tries)
     buffy = Buffy(
         rpc, ram_start=args.ram_start, ram_size=args.ram_size, verbose=False)
     buffy.start()
