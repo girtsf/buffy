@@ -8,7 +8,9 @@ import time
 
 import console
 import openocd_rpc
+import tcp_server
 
+TCP_PORT = 5123
 
 BUFFY_MAGIC = 0xdd664662
 
@@ -33,6 +35,7 @@ class Buffy:
                  verbose=False):
         self._alive = False
         self._console_reader_thread = None
+        self._tcp_server = None
         self._console = console.Console()
         self._rpc = rpc
         self._verbose = verbose
@@ -132,7 +135,6 @@ class Buffy:
 
     def buffy_write(self, buf):
         """Writes given byte(s) to buffy."""
-        # TODO: synchronize openocd access.
         while buf:
             tail = self._get_rx_tail()
             head = self._get_rx_head()
@@ -155,7 +157,8 @@ class Buffy:
             buf_to_write = buf[:write_len]
 
             rx_buf_address = self._buffy_address + TX_BUF_OFFSET + self._tx_buf_size
-            self._rpc.write_memory(rx_buf_address + head, buf_to_write, width=8)
+            self._rpc.write_memory(
+                rx_buf_address + head, buf_to_write, width=8)
 
             new_rx_head = (head + write_len) % self._rx_buf_size
             self._set_rx_head(new_rx_head)
@@ -166,13 +169,16 @@ class Buffy:
         self._alive = True
         self._console.setup()
         self._start_console_reader()
+        self._tcp_server = tcp_server.SimpleTcpServer(TCP_PORT,
+                                                      self.buffy_write)
 
     def join(self):
         self.watch()
         self._console_reader_thread.join()
 
     def _start_console_reader(self):
-        self._console_reader_thread = threading.Thread(target=self._console_reader_start, name='console_reader')
+        self._console_reader_thread = threading.Thread(
+            target=self._console_reader_start, name='console_reader')
         self._console_reader_thread.daemon = True
         self._console_reader_thread.start()
 
@@ -243,9 +249,15 @@ class Buffy:
 
 if __name__ == '__main__':
     rpc = openocd_rpc.OpenOcdRpc()
-    # TODO: command line flags + rc.
-    ram_start = 0x20000000  # stm32f0
-    ram_size = 0x2000
+    if len(sys.argv) > 1:
+        ram_start = int(sys.argv[1], 0)
+    else:
+        ram_start = 0x10000000
+        # ram_start = 0x20000000  # stm32f0
+    if len(sys.argv) > 2:
+        ram_size = int(sys.argv[2], 0)
+    else:
+        ram_size = 128 * 1024
     buffy = Buffy(rpc, ram_start=ram_start, ram_size=ram_size, verbose=False)
     buffy.start()
     buffy.join()
