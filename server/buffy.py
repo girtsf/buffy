@@ -305,11 +305,17 @@ if __name__ == '__main__':
         help='Command(s) to execute in the beginning')
     parser.add_argument(
         '--tries', type=int, default=1, help='Number of retries on error')
+    parser.add_argument(
+        '--verbose',
+        dest='verbose',
+        action='store_true',
+        help='Whether to print debug info')
+    parser.set_defaults(verbose=False)
     args = parser.parse_args()
 
     rpc = openocd_rpc.OpenOcdRpc(
-        prepare_commands=args.prepare_command, tries=args.tries)
+        prepare_commands=args.prepare_command, tries=args.tries, verbose=args.verbose)
     buffy = Buffy(
-        rpc, ram_start=args.ram_start, ram_size=args.ram_size, verbose=False)
+        rpc, ram_start=args.ram_start, ram_size=args.ram_size, verbose=args.verbose)
     buffy.start()
     buffy.join()

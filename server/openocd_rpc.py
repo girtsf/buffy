@@ -13,6 +13,8 @@ import traceback
 CMD_TERMINATOR = b'\x1a'
 # Default TCP port OpenOCD listens on.
 DEFAULT_PORT = 6666
+# Seconds to wait for a response.
+TIMEOUT = 2
 
 
 class OpenOcdError(Exception):
@@ -20,23 +22,24 @@ class OpenOcdError(Exception):
 
 
 class OpenOcdRpc:
-    def __init__(self, port=DEFAULT_PORT, prepare_commands=None, tries=1):
+    def __init__(self, port=DEFAULT_PORT, prepare_commands=None, tries=1, verbose=False):
         """Initializes openocd interface.
 
         Args:
-          port: int, TCP port to connect to
+          port: int, TCP port to connect to.
           prepare_commands: list of str, if specified, gets executed
-              before we start sending commands (or after an error)
+              before we start sending commands (or after an error).
           tries: int, number of tries to do before giving up.
+          verbose: bool, whether to output debug info.
         """
         self._prepare_commands = prepare_commands or []
         self._tries = tries
         self._wait_between_tries = 1  # seconds
         # Whether we have sent the prepare commands.
         self._prepared = False
+        self._verbose = verbose
 
-        # Timeout of 1s.
-        self._sock = socket.create_connection(('localhost', port), 1)
+        self._sock = socket.create_connection(('localhost', port), TIMEOUT)
         self._remaining_buffer_bytes = None
         self._lock = threading.Lock()
 
@@ -69,6 +72,8 @@ class OpenOcdRpc:
         return self._send_command_locked_real(cmd)
 
     def _send_command_locked_real(self, cmd):
+        if self._verbose:
+            print('>%s' % cmd)
         cmd = cmd.encode('utf-8') + CMD_TERMINATOR
         self._sock.send(cmd)
         received = []
