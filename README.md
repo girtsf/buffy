@@ -6,8 +6,9 @@ script that uses OpenOCD to exchange data with the code on the embedded side.
 
 ## Usage
 
-Prerequisite: you should be able to debug your target with OpenOCD, and
-`tcl_port` should be enabled (it is by default).
+Prerequisites: you should be able to debug your target with OpenOCD, and
+`tcl_port` should be enabled (it is by default). The client should work
+with either Python 2 or 3.
 
 On the embedded side: add `embedded/buffy.c` and `embedded/buffy.h` to your
 project using your favorite build system. Somewhere in your code include
@@ -17,8 +18,9 @@ might want to create some sort of `printf` function that `sprintf`s into
 a buffer before calling `buffy_tx`.
 
 On the host: from `client` directory run `./buffy.py --ram_start <RAM start
-address>`. It should find the Buffy datastructure and automatically stream
-data from it when the target writes to it.
+address>`. E.g., if you had an STM32F0 family microcontroller, you might
+run `./buffy.py --ram_start 0x20000000`. It should find the Buffy datastructure
+and automatically stream data from it when the target writes to it.
 
 ## More Details
 

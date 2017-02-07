@@ -22,7 +22,11 @@ class OpenOcdError(Exception):
 
 
 class OpenOcdRpc:
-    def __init__(self, port=DEFAULT_PORT, prepare_commands=None, tries=1, verbose=False):
+    def __init__(self,
+                 port=DEFAULT_PORT,
+                 prepare_commands=None,
+                 tries=1,
+                 verbose=False):
         """Initializes openocd interface.
 
         Args:
@@ -153,8 +157,8 @@ class OpenOcdRpc:
 
     def write_memory(self, *args, **kwargs):
         with self._lock:
-            return self._maybe_retry(self._write_memory_locked, *args, **
-                                     kwargs)
+            return self._maybe_retry(self._write_memory_locked, *args,
+                                     **kwargs)
 
     def _write_memory_locked(self, address, values, width=32):
         """Writes to memory.

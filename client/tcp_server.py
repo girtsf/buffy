@@ -1,10 +1,11 @@
-# Simple TCP server with a callback for received bytes.
+# Simple TCP server with a callback that gets called when
+# data arrives over the TCP interface.
+#
+# This requires Python 3, mostly due to lazyness.
 
 import socket
 import threading
 import socketserver
-
-PORT = 5123
 
 
 class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
@@ -42,9 +43,11 @@ class SimpleTcpServer:
 
 
 if __name__ == "__main__":
+
     def cb(line):
         print('cb: %s' % line)
-    server = SimpleTcpServer(PORT, cb)
+
+    server = SimpleTcpServer(5123, cb)
 
     import time
     time.sleep(10)
