@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Interface to buffy terminal through OpenOCD's RPC server.
+# Interface to buffy debug console through OpenOCD's RPC server.
 
 import argparse
 import sys
@@ -11,7 +11,6 @@ import os
 # Local imports.
 import console
 import openocd_rpc
-import tcp_server
 
 # Path to store previous location of buffy on target.
 BUFFY_PREVIOUS_ADDRESS_FILE = os.path.expanduser('~/.buffy_previous_address')
@@ -19,10 +18,9 @@ BUFFY_PREVIOUS_ADDRESS_FILE = os.path.expanduser('~/.buffy_previous_address')
 DEFAULT_RAM_START = 0x10000000
 DEFAULT_RAM_SIZE = 128 * 1024
 
-TCP_PORT = 5123
-
 BUFFY_MAGIC = 0xdd664662
 
+# The constants here must match the structure defined in buffy.h.
 TX_TAIL_OFFSET = 12
 TX_HEAD_OFFSET = 16
 RX_TAIL_OFFSET = 20
@@ -41,9 +39,11 @@ class Buffy:
                  ram_start=None,
                  ram_size=None,
                  buffy_address=None,
+                 tcp_server_port=None,
                  verbose=False):
         self._alive = False
         self._console_reader_thread = None
+        self._tcp_server_port = tcp_server_port
         self._tcp_server = None
         self._console = console.Console()
         self._rpc = rpc
@@ -209,8 +209,11 @@ class Buffy:
         self._alive = True
         self._console.setup()
         self._start_console_reader()
-        self._tcp_server = tcp_server.SimpleTcpServer(TCP_PORT,
-                                                      self.buffy_write)
+        if self._tcp_server_port:
+            # Only import tcp_server here as it's not Python2 compatible.
+            import tcp_server
+            self._tcp_server = tcp_server.SimpleTcpServer(
+                self._tcp_server_port, self.buffy_write)
 
     def join(self):
         self.watch()
@@ -306,6 +309,12 @@ if __name__ == '__main__':
     parser.add_argument(
         '--tries', type=int, default=1, help='Number of retries on error')
     parser.add_argument(
+        '--tcp_server_port',
+        type=int,
+        default=None,
+        help=('TCP port to listen on, if specified. Data sent to this port'
+              ' gets sent over the Buffy link.'))
+    parser.add_argument(
         '--verbose',
         dest='verbose',
         action='store_true',
@@ -314,8 +323,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     rpc = openocd_rpc.OpenOcdRpc(
-        prepare_commands=args.prepare_command, tries=args.tries, verbose=args.verbose)
+        prepare_commands=args.prepare_command,
+        tries=args.tries,
+        verbose=args.verbose)
     buffy = Buffy(
-        rpc, ram_start=args.ram_start, ram_size=args.ram_size, verbose=args.verbose)
+        rpc,
+        ram_start=args.ram_start,
+        ram_size=args.ram_size,
+        tcp_server_port=args.tcp_server_port,
+        verbose=args.verbose)
     buffy.start()
     buffy.join()
