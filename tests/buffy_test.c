@@ -1,4 +1,4 @@
-#include "lib/buffy.h"
+#include "buffy.h"
 
 #include <stdio.h>
 

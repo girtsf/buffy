@@ -6,7 +6,7 @@
 #else  // DEBUG
 #define DEBUG_PRINTF(x...)
 #endif
-#include "lib/buffy.h"
+#include "buffy.h"
 
 // A bunch of stuff was cribbed and/or inspired by LK's cbuf.
 
