@@ -32,6 +32,13 @@ memory.
 Buffy uses OpenOCD's "RPC" interface to get data between the client and the
 embedded target. It could use some improvements.
 
+## Supported Devices
+
+This has been tested on couple different Cortex-M0 devices (e.g., STM32F0). It
+should work on other platforms with minimal changes as long as your target has
+32-bit wide debug access, and allows OpenOCD to read/write memory while the
+target is running.
+
 ## Contributing
 
 Pull requests are welcome. Also, I would love if somebody cleaned up OpenOCDs
