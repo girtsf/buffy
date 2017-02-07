@@ -12,15 +12,22 @@ import os
 import console
 import openocd_rpc
 
-# Path to store previous location of buffy on target.
+# Path to store previous location of buffy on target. If file does not exist,
+# buffy will scan through the memory to look for magic string. If this file
+# exists, buffy will first try the address found in the file.
 BUFFY_PREVIOUS_ADDRESS_FILE = os.path.expanduser('~/.buffy_previous_address')
 
+# If not specified, where to start scanning through RAM to look for buffy
+# structure.
 DEFAULT_RAM_START = 0x10000000
+# How far to keep looking.
 DEFAULT_RAM_SIZE = 128 * 1024
 
+# Magic value that marks the start of buffy structure.
 BUFFY_MAGIC = 0xdd664662
 
-# The constants here must match the structure defined in buffy.h.
+# Offsets in bytes from the start of the magic value. Values here must match
+# the structure defined in buffy.h.
 TX_TAIL_OFFSET = 12
 TX_HEAD_OFFSET = 16
 RX_TAIL_OFFSET = 20
@@ -41,6 +48,22 @@ class Buffy:
                  buffy_address=None,
                  tcp_server_port=None,
                  verbose=False):
+        """Initializes Buffy class.
+
+        Args:
+          rpc: OpenOcdRpc object.
+          ram_start: int, optional, address where we start looking for buffy
+              structure. Either ram_start+ram_size or buffy_address must be
+              given.
+          ram_size: int, optional, RAM size in bytes - how far do we keep
+              looking before giving up.
+          buffy_address: int, optional, address of the buffy buffer. Can be
+              used instead of ram_start/ram_size if the location is known.
+          tcp_server_port: int, optional. If given, starts up a TCP server
+              that will send all data received on the TCP socket through
+              buffy to target.
+          verbose: bool, whether to be spammy.
+        """
         self._alive = False
         self._console_reader_thread = None
         self._tcp_server_port = tcp_server_port
