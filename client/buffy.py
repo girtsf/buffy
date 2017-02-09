@@ -3,6 +3,7 @@
 # Interface to buffy debug console through OpenOCD's RPC server.
 
 import argparse
+import configparser
 import sys
 import threading
 import time
@@ -12,9 +13,10 @@ import os
 import console
 import openocd_rpc
 
-# Path to store previous location of buffy on target. If file does not exist,
-# buffy will scan through the memory to look for magic string. If this file
-# exists, buffy will first try the address found in the file.
+# Path to store previous locations of buffy datastructure addresses, keyed
+# by target name (if provided). If file does not exist or target is not found
+# in the file, buffy will scan for the datastructure in memory and write it
+# out to the file.
 BUFFY_PREVIOUS_ADDRESS_FILE = os.path.expanduser('~/.buffy_previous_address')
 
 # If not specified, where to start scanning through RAM to look for buffy
@@ -46,6 +48,7 @@ class Buffy:
                  ram_start=None,
                  ram_size=None,
                  buffy_address=None,
+                 target_name='default',
                  tcp_server_port=None,
                  verbose=False):
         """Initializes Buffy class.
@@ -59,6 +62,7 @@ class Buffy:
               looking before giving up.
           buffy_address: int, optional, address of the buffy buffer. Can be
               used instead of ram_start/ram_size if the location is known.
+          target_name: str, name to use for storing/recalling previous address.
           tcp_server_port: int, optional. If given, starts up a TCP server
               that will send all data received on the TCP socket through
               buffy to target.
@@ -68,6 +72,7 @@ class Buffy:
         self._console_reader_thread = None
         self._tcp_server_port = tcp_server_port
         self._tcp_server = None
+        self._target_name = target_name
         self._console = console.Console()
         self._rpc = rpc
         self._verbose = verbose
@@ -86,29 +91,31 @@ class Buffy:
         self._parse_header(header)
 
     @staticmethod
-    def _read_previous_address():
+    def _read_previous_address(target_name):
         """Returns previous buffy address or None."""
         if not os.path.exists(BUFFY_PREVIOUS_ADDRESS_FILE):
             return None
-        with open(BUFFY_PREVIOUS_ADDRESS_FILE) as fh:
-            address_string = fh.read()
-        if not address_string:
-            return None
-        try:
-            address = int(address_string, 0)
-        except ValueError:
-            return None
+        config = configparser.ConfigParser()
+        config.read(BUFFY_PREVIOUS_ADDRESS_FILE)
+        if target_name in config and 'address' in config[target_name]:
+            return int(config[target_name]['address'], 0)
 
-        return address
+        return None
 
     @staticmethod
-    def _write_previous_address(address):
-        with open(BUFFY_PREVIOUS_ADDRESS_FILE, 'w') as fh:
-            fh.write('0x%x' % address)
+    def _write_previous_address(target_name, address):
+        config = configparser.ConfigParser()
+        if os.path.exists(BUFFY_PREVIOUS_ADDRESS_FILE):
+            config.read(BUFFY_PREVIOUS_ADDRESS_FILE)
+        if target_name not in config:
+            config.add_section(target_name)
+        config[target_name]['address'] = '0x%x' % address
+        with open(BUFFY_PREVIOUS_ADDRESS_FILE, 'wt') as fh:
+            config.write(fh)
 
     def _find_magic(self, ram_start, ram_size):
         """Looks for BUFFY_MAGIC in ram, returns first address."""
-        previous_address = self._read_previous_address()
+        previous_address = self._read_previous_address(self._target_name)
         if previous_address is not None:
             v = self._rpc.read_word(previous_address)
             if v == BUFFY_MAGIC:
@@ -122,7 +129,7 @@ class Buffy:
             if v == BUFFY_MAGIC:
                 if self._verbose:
                     print('Found magic at 0x%x' % i)
-                self._write_previous_address(ram_start + i)
+                self._write_previous_address(self._target_name, ram_start + i)
                 return ram_start + i
         raise BuffyError('Could not find magic word')
 
@@ -338,6 +345,11 @@ if __name__ == '__main__':
         help=('TCP port to listen on, if specified. Data sent to this port'
               ' gets sent over the Buffy link.'))
     parser.add_argument(
+        '--target_name',
+        type=str,
+        default='default',
+        help='Target name to use in storing previous buffy address location')
+    parser.add_argument(
         '--verbose',
         dest='verbose',
         action='store_true',
@@ -354,6 +366,7 @@ if __name__ == '__main__':
         ram_start=args.ram_start,
         ram_size=args.ram_size,
         tcp_server_port=args.tcp_server_port,
+        target_name=args.target_name,
         verbose=args.verbose)
     buffy.start()
     buffy.join()
