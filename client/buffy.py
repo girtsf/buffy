@@ -323,6 +323,11 @@ class Buffy:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        '--port',
+        type=int,
+        default=openocd_rpc.DEFAULT_PORT,
+        help='OpenOCD TCP RPC port')
+    parser.add_argument(
         '--ram_start',
         type=lambda x: int(x, 0),
         default=DEFAULT_RAM_START,
@@ -358,6 +363,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     rpc = openocd_rpc.OpenOcdRpc(
+        port=args.port,
         prepare_commands=args.prepare_command,
         tries=args.tries,
         verbose=args.verbose)
