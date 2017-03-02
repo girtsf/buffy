@@ -15,7 +15,7 @@ static inline void memory_barrier(void) {
   // On ARMv6m/v7: waits until memory is written out before returning.
   __asm__ volatile("dsb" ::: "memory");
 #else  // TESTING
-  // noop on host.
+// noop on host.
 #endif
 }
 
@@ -27,7 +27,9 @@ static inline uint32_t modpow2(uint32_t value, uint32_t p2) {
   return value & ((1UL << p2) - 1);
 }
 
-static inline uint32_t valpow2(uint32_t p2) { return 1LU << p2; }
+static inline uint32_t valpow2(uint32_t p2) {
+  return 1LU << p2;
+}
 
 int buffy_tx(struct buffy* t, const char* buf, int len) {
   int pos = 0;
@@ -67,13 +69,48 @@ int buffy_tx(struct buffy* t, const char* buf, int len) {
     memory_barrier();
 
     // Write back to head. The tail could have been modified by the debug
-    // reader,
-    // but that's fine.
+    // reader, but that's fine.
     t->tx_head = modpow2(head + write_len, t->tx_len_pow2);
 
     memory_barrier();
 
     pos += write_len;
+  }
+
+  return pos;
+}
+
+int buffy_tx_buffer_read(struct buffy* t, char* buf, int len) {
+  int pos = 0;
+  DEBUG_PRINTF("tx_read: %d\n", len);
+  memory_barrier();
+  while (pos < len) {
+    uint32_t tail = t->tx_tail;
+    uint32_t head = t->tx_head;
+
+    DEBUG_PRINTF("head: %d tail: %d pos: %d\n", head, tail, pos);
+
+    if (head == tail) return pos;
+
+    int read_len;
+    if (head > tail) {
+      // No wrap-around.
+      read_len = head - tail;
+    } else {
+      // Read to the end of the buffer.
+      read_len = valpow2(t->tx_len_pow2) - tail;
+    }
+    read_len = min(read_len, len - pos);
+    DEBUG_PRINTF("read_len: %d tx_len_pow2: %d\n", read_len, t->tx_len_pow2);
+    memcpy(buf + pos, t->tx_buf + tail, read_len);
+
+    memory_barrier();
+
+    t->tx_tail = modpow2(tail + read_len, t->tx_len_pow2);
+
+    memory_barrier();
+
+    pos += read_len;
   }
 
   return pos;
@@ -95,8 +132,8 @@ int buffy_rx(struct buffy* t, char* buf, int len) {
 
     int read_len;
     if (head > tail) {
-        // No wrap-around.
-        read_len = head - tail;
+      // No wrap-around.
+      read_len = head - tail;
     } else {
       // Read to the end of the buffer.
       read_len = valpow2(t->rx_len_pow2) - tail;

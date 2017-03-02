@@ -30,12 +30,25 @@ struct buffy {
   uint8_t rx_buf[BUFFY_RX_BUF_SIZE];
 };
 
+// Transmit buffer: from embedded to host.
+// =======================================
 // Copies data to be sent to the transmit buffer.
 //
 // Returns number of characters queued. This number might be smaller
 // than requested number if there is no space in the buffer.
 int buffy_tx(struct buffy* t, const char* buf, int len);
 
+// Attempts to read from the *transmit* buffer (characters that are pending
+// host's) read. You would typically not want to use this. Also, there is
+// no synchronization between this and the reader on the host. So if there is
+// a host reader and it updates the pointers through the debug interface,
+// interesting things might happen.
+//
+// Returns number of characters written to 'buf' (up to 'len').
+int buffy_tx_buffer_read(struct buffy* t, char* buf, int len);
+
+// Receive buffer: from host to embedded.
+// ======================================
 // Attempts to read from the receive buffer for up to len characters.
 //
 // Returns the number of characters received.

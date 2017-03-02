@@ -1,6 +1,7 @@
 #include "buffy.h"
 
 #include <stdio.h>
+#include <string.h>  // memcmp
 
 #include <cutest.h>
 
@@ -36,6 +37,21 @@ void test_tx(void) {
   TEST_EQ(buffy.tx_overflow_counter, 3);
 }
 
+void test_tx_buffer_read(void) {
+  INSTANTIATE_BUFFY(buffy);
+  TEST_EQ(buffy_tx(&buffy, "123456789abcdef", 16), 15);
+
+  char out[16];
+  TEST_EQ(15, buffy_tx_buffer_read(&buffy, out, 16));
+  TEST_EQ(0, memcmp(out, "123456789abcdef", 15));
+
+  TEST_EQ(buffy_tx(&buffy, "feefoo", 6), 6);
+  TEST_EQ(buffy_tx(&buffy, "bar", 3), 3);
+
+  TEST_EQ(9, buffy_tx_buffer_read(&buffy, out, 16));
+  TEST_EQ(0, memcmp(out, "feefoobar", 9));
+}
+
 void test_rx(void) {
   INSTANTIATE_BUFFY(buffy);
 
@@ -61,4 +77,7 @@ void test_rx(void) {
   TEST_EQ(buf[6], 'a');
 }
 
-TEST_LIST = {{"test_tx", test_tx}, {"text_rx", test_rx}, {0}};
+TEST_LIST = {{"test_tx", test_tx},
+             {"text_rx", test_rx},
+             {"test_tx_buffer_read", test_tx_buffer_read},
+             {0}};
