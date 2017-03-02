@@ -15,6 +15,6 @@ buffy_test: buffy_test.c $(SRC_DIR)/buffy.c $(SRC_DIR)/buffy.h ../external/cutes
 	gcc $(CFLAGS) $(DEFINES) $(INCLUDES) $< $(SRC_DIR)/buffy.c -o $@
 
 # Pull in external submodules if they are not present.
-external/cutest/include/cutest.h:
+../external/cutest/include/cutest.h:
 	git submodule init
 	git submodule update
