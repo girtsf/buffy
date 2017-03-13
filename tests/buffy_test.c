@@ -13,17 +13,19 @@
   } while (0)
 
 void test_tx(void) {
+  // Note, the define in Makefile sets TX buffer to 16B.
   INSTANTIATE_BUFFY(buffy);
-  TEST_CHECK(buffy.tx_head == 0);
-  TEST_CHECK(buffy.tx_tail == 0);
+  TEST_EQ(buffy.tx_head, 0);
+  TEST_EQ(buffy.tx_tail, 0);
+  TEST_EQ(buffy_tx_get_buffer_size(&buffy), 15);
 
-  TEST_CHECK(buffy_tx(&buffy, "wahhh", 5) == 5);
-  TEST_CHECK(buffy.tx_head == 5);
-  TEST_CHECK(buffy.tx_tail == 0);
+  TEST_EQ(buffy_tx(&buffy, "wahhh", 5), 5);
+  TEST_EQ(buffy.tx_head, 5);
+  TEST_EQ(buffy.tx_tail, 0);
 
-  TEST_CHECK(buffy_tx(&buffy, "foo", 3) == 3);
-  TEST_CHECK(buffy.tx_head == 8);
-  TEST_CHECK(buffy.tx_tail == 0);
+  TEST_EQ(buffy_tx(&buffy, "foo", 3), 3);
+  TEST_EQ(buffy.tx_head, 8);
+  TEST_EQ(buffy.tx_tail, 0);
 
   TEST_EQ(buffy.tx_overflow_counter, 0);
   TEST_EQ(buffy_tx(&buffy, "123456789abcdef", 16), 16 - 5 - 3 - 1);
@@ -35,6 +37,23 @@ void test_tx(void) {
   buffy.tx_tail = 1;
   TEST_EQ(buffy_tx(&buffy, "123456789abcdef", 16), 1);
   TEST_EQ(buffy.tx_overflow_counter, 3);
+}
+
+void test_tx_get_buffer_free(void) {
+  INSTANTIATE_BUFFY(buffy);
+  TEST_EQ(buffy_tx_get_buffer_free(&buffy), 15);
+  TEST_EQ(buffy_tx(&buffy, "wahhh", 5), 5);
+  TEST_EQ(buffy_tx_get_buffer_free(&buffy), 10);
+  TEST_EQ(buffy_tx(&buffy, "foo", 3), 3);
+  TEST_EQ(buffy_tx_get_buffer_free(&buffy), 7);
+  TEST_EQ(buffy_tx(&buffy, "123456789abcdef", 16), 16 - 5 - 3 - 1);
+  TEST_EQ(buffy_tx_get_buffer_free(&buffy), 0);
+  buffy.tx_tail = 1;
+  TEST_EQ(buffy_tx_get_buffer_free(&buffy), 1);
+  buffy.tx_tail = 5;
+  TEST_EQ(buffy_tx_get_buffer_free(&buffy), 5);
+  TEST_EQ(buffy_tx(&buffy, "hi", 2), 2);
+  TEST_EQ(buffy_tx_get_buffer_free(&buffy), 3);
 }
 
 void test_tx_buffer_read(void) {
@@ -80,4 +99,5 @@ void test_rx(void) {
 TEST_LIST = {{"test_tx", test_tx},
              {"text_rx", test_rx},
              {"test_tx_buffer_read", test_tx_buffer_read},
+             {"test_tx_get_buffer_free", test_tx_get_buffer_free},
              {0}};

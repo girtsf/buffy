@@ -47,6 +47,16 @@ int buffy_tx(struct buffy* t, const char* buf, int len);
 // Returns number of characters written to 'buf' (up to 'len').
 int buffy_tx_buffer_read(struct buffy* t, char* buf, int len);
 
+// Returns the usable size of the TX buffer in bytes.
+//
+// This includes bytes that have not yet been read out). Due to circular buffer
+// implementation reasons the usable buffer size is one smaller than the actual
+// buffer. This is accounted for in the return value of this function.
+int buffy_tx_get_buffer_size(struct buffy* t);
+
+// Returns number of bytes free in the TX buffer.
+int buffy_tx_get_buffer_free(struct buffy* t);
+
 // Receive buffer: from host to embedded.
 // ======================================
 // Attempts to read from the receive buffer for up to len characters.

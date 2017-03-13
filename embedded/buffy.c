@@ -116,6 +116,32 @@ int buffy_tx_buffer_read(struct buffy* t, char* buf, int len) {
   return pos;
 }
 
+int buffy_tx_get_buffer_size(struct buffy* t) {
+  // We can't store full 2**x bytes as we couldn't distinguish from an empty
+  // buffer then.
+  return valpow2(t->tx_len_pow2) - 1;
+}
+
+int buffy_tx_get_buffer_free(struct buffy* t) {
+  uint32_t tail = t->tx_tail;
+  uint32_t head = t->tx_head;
+  if (head >= tail) {
+    if (tail == 0) {
+      // Special case for when tail is at 0. We don't want to write all the
+      // way to the end then.
+      return valpow2(t->tx_len_pow2) - head - 1;
+    } else {
+      // From head -> end.
+      int second_half = valpow2(t->tx_len_pow2) - head;
+      // From start to tail - 1.
+      int first_half = tail - 1;
+      return second_half + first_half;
+    }
+  } else {
+    return tail - head - 1;
+  }
+}
+
 int buffy_rx(struct buffy* t, char* buf, int len) {
   int pos = 0;
   DEBUG_PRINTF("rx: %d\n", len);
