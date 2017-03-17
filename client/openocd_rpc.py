@@ -150,7 +150,10 @@ class OpenOcdRpc:
             raise OpenOcdError('Got unexpected response from mem2array: "%s"' %
                                mem_bytes_hex)
         # Parse as integers and sort in proper order.
-        items = [int(x, 10) for x in items]
+        try:
+            items = [int(x, 10) for x in items]
+        except ValueError as e:
+            raise OpenOcdError('Failed decoding memory: %s' % e)
         pairs = sorted(zip(items[::2], items[1::2]))
         # Now that they are sorted, return an array of second elements (values).
         return [y for x, y in pairs]
