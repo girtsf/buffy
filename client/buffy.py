@@ -208,6 +208,14 @@ class Buffy:
         while buf:
             tail = self._get_rx_tail()
             head = self._get_rx_head()
+            # Sanity check the values. If they are out of bounds, the target likely
+            # ended up with the buffy structure in a different place and we are reading
+            # garbage.
+            # TODO: instead of aborting, try to find the structure again.
+            if (tail >= self._rx_buf_size) or (head >= self._rx_buf_size):
+                raise BuffyError(
+                    'RX buffer index out of range (tail: %d head: %d), aborting.'
+                    % (head, tail))
             if self._verbose:
                 print('RX tail: %d head: %d' % (tail, head))
             if head >= tail:
@@ -293,6 +301,10 @@ class Buffy:
         while self._alive:
             tail = self._get_tx_tail()
             head = self._get_tx_head()
+            if (tail >= self._tx_buf_size) or (head >= self._tx_buf_size):
+                raise BuffyError(
+                    'TX buffer index out of range (tail: %d head: %d), aborting.'
+                    % (head, tail))
             if tail != head:
                 if self._verbose:
                     print('head: %d tail: %d tx_buf_size: %d' %
