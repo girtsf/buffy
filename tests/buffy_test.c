@@ -28,15 +28,30 @@ void test_tx(void) {
   TEST_EQ(buffy.tx_tail, 0);
 
   TEST_EQ(buffy.tx_overflow_counter, 0);
-  TEST_EQ(buffy_tx(&buffy, "123456789abcdef", 16), 16 - 5 - 3 - 1);
+  TEST_EQ(buffy_tx(&buffy, "123456789abcdefg", 16), 16 - 5 - 3 - 1);
   TEST_EQ(buffy.tx_overflow_counter, 1);
 
-  TEST_EQ(buffy_tx(&buffy, "123456789abcdef", 16), 0);
+  TEST_EQ(buffy_tx(&buffy, "123456789abcdefg", 16), 0);
   TEST_EQ(buffy.tx_overflow_counter, 2);
 
   buffy.tx_tail = 1;
-  TEST_EQ(buffy_tx(&buffy, "123456789abcdef", 16), 1);
+  TEST_EQ(buffy_tx(&buffy, "123456789abcdefg", 16), 1);
   TEST_EQ(buffy.tx_overflow_counter, 3);
+
+  // Safety checks - if tail or head is messed up, make sure buffy returns
+  // 0 and resets.
+  buffy.tx_tail = 16;  // One past the end.
+  buffy.tx_head = 3;
+  TEST_EQ(buffy_tx(&buffy, "123456789abcdefg", 16), 0);
+  TEST_EQ(buffy.tx_tail, 0);
+  TEST_EQ(buffy.tx_head, 0);
+
+  // Move head past the end.
+  buffy.tx_head = 16;  // One outside the bounds.
+  buffy.tx_tail = 3;
+  TEST_EQ(buffy_tx(&buffy, "123456789abcdefg123456789abcdefg", 32), 0);
+  TEST_EQ(buffy.tx_tail, 0);
+  TEST_EQ(buffy.tx_tail, 0);
 }
 
 void test_tx_get_buffer_free(void) {
@@ -94,6 +109,21 @@ void test_rx(void) {
   TEST_EQ(buf[0], 'c');
   TEST_EQ(buf[5], 'h');
   TEST_EQ(buf[6], 'a');
+
+  // Safety checks - if tail or head is messed up, make sure buffy returns
+  // 0 and resets.
+  buffy.rx_tail = 9;  // One past the end.
+  buffy.rx_head = 3;
+  TEST_EQ(buffy_rx(&buffy, buf, 8), 0);
+  TEST_EQ(buffy.rx_tail, 0);
+  TEST_EQ(buffy.rx_head, 0);
+
+  // Move head past the end.
+  buffy.rx_head = 9;  // One outside the bounds.
+  buffy.rx_tail = 3;
+  TEST_EQ(buffy_rx(&buffy, buf, 8), 0);
+  TEST_EQ(buffy.rx_tail, 0);
+  TEST_EQ(buffy.rx_tail, 0);
 }
 
 TEST_LIST = {{"test_tx", test_tx},

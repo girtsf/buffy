@@ -34,12 +34,22 @@ static inline uint32_t valpow2(uint32_t p2) {
 int buffy_tx(struct buffy* t, const char* buf, int len) {
   int pos = 0;
   DEBUG_PRINTF("tx: %d\n", len);
+  uint32_t tx_bufsize = valpow2(t->tx_len_pow2);
   memory_barrier();
   while (pos < len) {
     // Make a local copy of tail and head, as the debug reader could modify
     // the tail and mess up our calculations.
     uint32_t tail = t->tx_tail;
     uint32_t head = t->tx_head;
+    // Safety check - if the reader clobbers head or tail with wrong values,
+    // reset it back to zeroes and fail this write.
+    if ((tail >= tx_bufsize) || (head >= tx_bufsize)) {
+      DEBUG_PRINTF("tail or head went out of bounds, resetting\n");
+      t->tx_tail = 0;
+      t->tx_head = 0;
+      memory_barrier();
+      return 0;
+    }
 
     DEBUG_PRINTF("head: %d tail: %d pos: %d\n", head, tail, pos);
 
@@ -145,12 +155,23 @@ int buffy_tx_get_buffer_free(struct buffy* t) {
 int buffy_rx(struct buffy* t, char* buf, int len) {
   int pos = 0;
   DEBUG_PRINTF("rx: %d\n", len);
+  uint32_t rx_bufsize = valpow2(t->rx_len_pow2);
   memory_barrier();
   while (pos < len) {
     // Make a local copy of tail and head, as the debug writer could modify
     // the head and mess up our calculations.
     uint32_t tail = t->rx_tail;
     uint32_t head = t->rx_head;
+
+    // Safety check - if the reader clobbers head or tail with wrong values,
+    // reset it back to zeroes and fail this write.
+    if ((tail >= rx_bufsize) || (head >= rx_bufsize)) {
+      DEBUG_PRINTF("tail or head went out of bounds, resetting\n");
+      t->rx_tail = 0;
+      t->rx_head = 0;
+      memory_barrier();
+      return 0;
+    }
 
     DEBUG_PRINTF("head: %d tail: %d pos: %d\n", head, tail, pos);
 
