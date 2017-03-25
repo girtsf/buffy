@@ -47,8 +47,27 @@ class OpenOcdRpc:
         self._remaining_buffer_bytes = None
         self._lock = threading.Lock()
 
+    @staticmethod
+    def _flush_socket(sock):
+        """Keeps reading from socket until nothing comes out."""
+        # Temporarily reduce timeout and flush buffer until nothing
+        # else comes out.
+        old_timeout = sock.gettimeout()
+        sock.settimeout(0.05)
+        try:
+            while True:
+                try:
+                    flushed = sock.recv(1024)
+                except socket.timeout:
+                    break
+                if not flushed:
+                    break
+                print('Flushed %d bytes' % len(flushed))
+        finally:
+            sock.settimeout(old_timeout)
+
     def _maybe_retry(self, cmd, *args, **kwargs):
-        """If self._tries > 1, handles BuffyError retries."""
+        """If self._tries > 1, handles BuffyError retries. Called under lock."""
         tries_left = self._tries
         while tries_left:
             try:
@@ -62,6 +81,7 @@ class OpenOcdRpc:
                 print('Waiting for %d s before retrying %d more time(s)' %
                       (self._wait_between_tries, tries_left))
                 time.sleep(self._wait_between_tries)
+                self._flush_socket(self._sock)
 
     def send_command(self, cmd):
         """Sends given command, returns the response as bytes."""
@@ -87,7 +107,11 @@ class OpenOcdRpc:
                 tmp = self._remaining_buffer_bytes
                 self._remaining_buffer_bytes = None
             else:
-                tmp = self._sock.recv(1024)
+                try:
+                    tmp = self._sock.recv(1024)
+                except socket.timeout:
+                    raise OpenOcdError('Socket read timeout')
+
                 if not tmp:
                     raise OpenOcdError('Socket read failed')
             if CMD_TERMINATOR in tmp:
