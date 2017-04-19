@@ -50,6 +50,7 @@ class Buffy:
                  buffy_address=None,
                  target_name='default',
                  tcp_server_port=None,
+                 poll_interval=0.5,
                  verbose=False):
         """Initializes Buffy class.
 
@@ -66,11 +67,13 @@ class Buffy:
           tcp_server_port: int, optional. If given, starts up a TCP server
               that will send all data received on the TCP socket through
               buffy to target.
+          poll_interval: float, time in seconds between queries. Note: if
           verbose: bool, whether to be spammy.
         """
         self._alive = False
         self._console_reader_thread = None
         self._tcp_server_port = tcp_server_port
+        self._poll_interval = poll_interval
         self._tcp_server = None
         self._target_name = target_name
         self._console = console.Console()
@@ -329,7 +332,7 @@ class Buffy:
                 print('TX side overflowed %d times!' % overflow_delta)
                 prev_overflow_counter = overflow_counter
 
-            time.sleep(0.5)
+            time.sleep(self._poll_interval)
 
 
 if __name__ == '__main__':
@@ -367,6 +370,11 @@ if __name__ == '__main__':
         default='default',
         help='Target name to use in storing previous buffy address location')
     parser.add_argument(
+            '--poll_interval',
+            type=float,
+            default=0.5,
+            help='Interval in seconds between update queries')
+    parser.add_argument(
         '--verbose',
         dest='verbose',
         action='store_true',
@@ -385,6 +393,7 @@ if __name__ == '__main__':
         ram_size=args.ram_size,
         tcp_server_port=args.tcp_server_port,
         target_name=args.target_name,
+        poll_interval=args.poll_interval,
         verbose=args.verbose)
     buffy.start()
     buffy.join()
