@@ -13,8 +13,8 @@ import traceback
 CMD_TERMINATOR = b'\x1a'
 # Default TCP port OpenOCD listens on.
 DEFAULT_PORT = 6666
-# Seconds to wait for a response.
-TIMEOUT = 2
+# Number of words to read at a time for read_memory.
+READ_CHUNK_SIZE = 4096
 
 
 class OpenOcdError(Exception):
@@ -26,7 +26,8 @@ class OpenOcdRpc:
                  port=DEFAULT_PORT,
                  prepare_commands=None,
                  tries=1,
-                 verbose=False):
+                 verbose=False,
+                 timeout=2):
         """Initializes openocd interface.
 
         Args:
@@ -35,6 +36,8 @@ class OpenOcdRpc:
               before we start sending commands (or after an error).
           tries: int, number of tries to do before giving up.
           verbose: bool, whether to output debug info.
+          timeout: int, default time in seconds to wait for a response on RPC
+              port.
         """
         self._prepare_commands = prepare_commands or []
         self._tries = tries
@@ -42,32 +45,28 @@ class OpenOcdRpc:
         # Whether we have sent the prepare commands.
         self._prepared = False
         self._verbose = verbose
+        self._timeout = timeout
 
-        self._sock = socket.create_connection(('localhost', port), TIMEOUT)
+        self._sock = socket.create_connection(('localhost', port),
+                                              self._timeout)
         self._remaining_buffer_bytes = None
         self._lock = threading.Lock()
 
-    @staticmethod
-    def _flush_socket(sock):
+    def _flush_socket(self):
         """Keeps reading from socket until nothing comes out."""
-        # Temporarily reduce timeout and flush buffer until nothing
-        # else comes out.
-        old_timeout = sock.gettimeout()
-        sock.settimeout(0.05)
-        try:
-            while True:
-                try:
-                    flushed = sock.recv(1024)
-                except socket.timeout:
-                    break
-                if not flushed:
-                    break
-                print('Flushed %d bytes' % len(flushed))
-        finally:
-            sock.settimeout(old_timeout)
+        # Use a shorter timeout instead of default.
+        self._sock.settimeout(0.05)
+        while True:
+            try:
+                flushed = self._sock.recv(1024)
+            except socket.timeout:
+                break
+            if not flushed:
+                break
+            print('Flushed %d bytes' % len(flushed))
 
     def _maybe_retry(self, cmd, *args, **kwargs):
-        """If self._tries > 1, handles BuffyError retries. Called under lock."""
+        """If self._tries > 1, handles retries. Called under lock."""
         tries_left = self._tries
         while tries_left:
             try:
@@ -81,23 +80,28 @@ class OpenOcdRpc:
                 print('Waiting for %d s before retrying %d more time(s)' %
                       (self._wait_between_tries, tries_left))
                 time.sleep(self._wait_between_tries)
-                self._flush_socket(self._sock)
+                self._flush_socket()
 
-    def send_command(self, cmd):
+    def send_command(self, cmd, timeout=None):
         """Sends given command, returns the response as bytes."""
         with self._lock:
-            return self._send_command_locked(cmd)
+            return self._send_command_locked(cmd, timeout=timeout)
 
-    def _send_command_locked(self, cmd):
+    def _send_command_locked(self, cmd, timeout=None):
         if not self._prepared:
             for command in self._prepare_commands:
-                self._send_command_locked_real(command)
+                self._send_command_locked_real(command, timeout=timeout)
         self._prepared = True
-        return self._send_command_locked_real(cmd)
+        return self._send_command_locked_real(cmd, timeout=timeout)
 
-    def _send_command_locked_real(self, cmd):
+    def _send_command_locked_real(self, cmd, timeout=None):
         if self._verbose:
             print('>%s' % cmd)
+        if timeout is not None:
+            self._sock.settimeout(timeout)
+        else:
+            # Use default timeout.
+            self._sock.settimeout(self._timeout)
         cmd = cmd.encode('utf-8') + CMD_TERMINATOR
         self._sock.send(cmd)
         received = []
@@ -154,7 +158,7 @@ class OpenOcdRpc:
 
     def read_memory(self, *args, **kwargs):
         with self._lock:
-            return self._maybe_retry(self._read_memory_locked, *args, **kwargs)
+            return self._read_memory_locked(*args, **kwargs)
 
     def _read_memory_locked(self, address, count, width=32):
         """Reads count elements with given width starting from address.
@@ -162,7 +166,27 @@ class OpenOcdRpc:
         Returns:
             list of ints, whose width depends on the 'width' argument
         """
-        # Unset array first, otherwise, if count is smaller, it will return previous values.
+        assert (width % 8) == 0
+        out = []
+        left = count
+        while left > 0:
+            this_count = min(left, READ_CHUNK_SIZE)
+            out.extend(
+                self._maybe_retry(
+                    self._read_memory_chunk_locked,
+                    address,
+                    this_count,
+                    width=width))
+            # Count is in words.
+            left -= this_count
+            # Address is in bytes.
+            address += this_count * (width // 8)
+        return out
+
+    def _read_memory_chunk_locked(self, address, count, width=32):
+        """Reads one chunk (up to 32K) of values."""
+        # Unset array first, otherwise, if count is smaller, it will return
+        # previous values.
         self._send_command_locked('array unset _rpc_array')
         self._send_command_locked('mem2array _rpc_array %d 0x%x %d' %
                                   (width, address, count))
@@ -179,7 +203,8 @@ class OpenOcdRpc:
         except ValueError as e:
             raise OpenOcdError('Failed decoding memory: %s' % e)
         pairs = sorted(zip(items[::2], items[1::2]))
-        # Now that they are sorted, return an array of second elements (values).
+        # Now that they are sorted, return an array of second elements
+        # (values).
         return [y for x, y in pairs]
 
     def write_memory(self, *args, **kwargs):
@@ -195,8 +220,10 @@ class OpenOcdRpc:
             values: list of ints
             width: int, write width in bits
         """
-        array = ' '.join(['%d 0x%x' % (index, value)
-                          for index, value in enumerate(values)])
+        if not values:
+            raise OpenOcdError('Empty array passed to write_memory!')
+        array = ' '.join(
+            ['%d 0x%x' % (index, value) for index, value in enumerate(values)])
         count = len(values)
         self._send_command_locked('array unset _rpc_array')
         self._send_command_locked('array set _rpc_array { %s }' % array)
