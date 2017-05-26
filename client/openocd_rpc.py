@@ -27,7 +27,8 @@ class OpenOcdRpc:
                  prepare_commands=None,
                  tries=1,
                  verbose=False,
-                 timeout=2):
+                 timeout=2,
+                 array_var_name='_rpc_array'):
         """Initializes openocd interface.
 
         Args:
@@ -38,6 +39,11 @@ class OpenOcdRpc:
           verbose: bool, whether to output debug info.
           timeout: int, default time in seconds to wait for a response on RPC
               port.
+          array_var_name: str, TCL variable name to use for storing
+              intermediate data when reading or writing chunks of memory. If
+              you intend to use multiple OpenOcdRpc instances against a single
+              openocd process concurrently, you might want to use different var
+              names.
         """
         self._prepare_commands = prepare_commands or []
         self._tries = tries
@@ -46,6 +52,7 @@ class OpenOcdRpc:
         self._prepared = False
         self._verbose = verbose
         self._timeout = timeout
+        self._array_var_name = array_var_name
 
         self._sock = socket.create_connection(('localhost', port),
                                               self._timeout)
@@ -187,10 +194,12 @@ class OpenOcdRpc:
         """Reads one chunk (up to 32K) of values."""
         # Unset array first, otherwise, if count is smaller, it will return
         # previous values.
-        self._send_command_locked('array unset _rpc_array')
-        self._send_command_locked('mem2array _rpc_array %d 0x%x %d' %
-                                  (width, address, count))
-        mem_bytes_hex = self._send_command_locked('ocd_echo $_rpc_array')
+        self._send_command_locked('array unset %s' % self._array_var_name)
+        self._send_command_locked(
+            'mem2array %s %d 0x%x %d' %
+            (self._array_var_name, width, address, count))
+        mem_bytes_hex = self._send_command_locked('ocd_echo $%s' %
+                                                  self._array_var_name)
         # The return value is pairs of <array index> <value>. The array indices
         # are not neccessarily in order. (Yay TCL!)
         items = mem_bytes_hex.split(b' ')
@@ -225,7 +234,9 @@ class OpenOcdRpc:
         array = ' '.join(
             ['%d 0x%x' % (index, value) for index, value in enumerate(values)])
         count = len(values)
-        self._send_command_locked('array unset _rpc_array')
-        self._send_command_locked('array set _rpc_array { %s }' % array)
-        self._send_command_locked('array2mem _rpc_array %d 0x%x %d' %
-                                  (width, address, count))
+        self._send_command_locked('array unset %s' % self._array_var_name)
+        self._send_command_locked('array set %s { %s }' %
+                                  (self._array_var_name, array))
+        self._send_command_locked(
+            'array2mem %s %d 0x%x %d' %
+            (self._array_var_name, width, address, count))
