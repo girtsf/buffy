@@ -370,22 +370,27 @@ if __name__ == '__main__':
         default='default',
         help='Target name to use in storing previous buffy address location')
     parser.add_argument(
-            '--poll_interval',
-            type=float,
-            default=0.5,
-            help='Interval in seconds between update queries')
+        '--poll_interval',
+        type=float,
+        default=0.5,
+        help='Interval in seconds between update queries')
+    parser.add_argument(
+        '--ignore_regexp',
+        action='append',
+        help='Regular expression(s) used to filter out junk lines')
     parser.add_argument(
         '--verbose',
         dest='verbose',
         action='store_true',
         help='Whether to print debug info')
-    parser.set_defaults(verbose=False)
+    parser.set_defaults(ignore_regexp=[], verbose=False)
     args = parser.parse_args()
 
     rpc = openocd_rpc.OpenOcdRpc(
         port=args.port,
         prepare_commands=args.prepare_command,
         tries=args.tries,
+        ignore_regexps=args.ignore_regexp,
         verbose=args.verbose)
     buffy = Buffy(
         rpc,

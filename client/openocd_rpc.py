@@ -4,6 +4,7 @@
 #
 # See: http://openocd.org/doc/html/Tcl-Scripting-API.html
 
+import re
 import socket
 import threading
 import time
@@ -28,7 +29,8 @@ class OpenOcdRpc:
                  tries=1,
                  verbose=False,
                  timeout=2,
-                 array_var_name='_rpc_array'):
+                 array_var_name='_rpc_array',
+                 ignore_regexps=[]):
         """Initializes openocd interface.
 
         Args:
@@ -44,6 +46,8 @@ class OpenOcdRpc:
               you intend to use multiple OpenOcdRpc instances against a single
               openocd process concurrently, you might want to use different var
               names.
+          ignore_regexps: list of str, regular expressions that indicate a
+              line from OpenOCD should be ignored when reading output.
         """
         self._prepare_commands = prepare_commands or []
         self._tries = tries
@@ -53,6 +57,7 @@ class OpenOcdRpc:
         self._verbose = verbose
         self._timeout = timeout
         self._array_var_name = array_var_name
+        self._ignore_regexps = ignore_regexps
 
         self._sock = socket.create_connection(('localhost', port),
                                               self._timeout)
@@ -141,10 +146,17 @@ class OpenOcdRpc:
         with self._lock:
             return self._maybe_retry(self._read_word_locked, address)
 
+    def _should_ignore(self, line):
+        line = line.decode('utf-8')
+        for regexp in self._ignore_regexps:
+            if re.match(regexp, line):
+                return True
+        return False
+
     def _read_word_locked(self, address):
         """Reads a 32-bit word from given address."""
         out = self._send_command_locked('ocd_mdw 0x%x' % address)
-        while out.startswith(b'DAP'):
+        while self._should_ignore(out):
             out = self._send_command_locked('ocd_mdw 0x%x' % address)
 
         # Return format:
@@ -198,17 +210,17 @@ class OpenOcdRpc:
         # Unset array first, otherwise, if count is smaller, it will return
         # previous values.
         self._send_command_locked('array unset %s' % self._array_var_name)
-        self._send_command_locked(
-            'mem2array %s %d 0x%x %d' %
-            (self._array_var_name, width, address, count))
-        mem_bytes_hex = self._send_command_locked('ocd_echo $%s' %
-                                                  self._array_var_name)
+        self._send_command_locked('mem2array %s %d 0x%x %d' %
+                                  (self._array_var_name, width, address,
+                                   count))
+        mem_bytes_hex = self._send_command_locked(
+            'ocd_echo $%s' % self._array_var_name)
         # The return value is pairs of <array index> <value>. The array indices
         # are not neccessarily in order. (Yay TCL!)
         items = mem_bytes_hex.split(b' ')
         if len(items) % 2:
-            raise OpenOcdError('Got unexpected response from mem2array: "%s"' %
-                               mem_bytes_hex)
+            raise OpenOcdError(
+                'Got unexpected response from mem2array: "%s"' % mem_bytes_hex)
         # Parse as integers and sort in proper order.
         try:
             items = [int(x, 10) for x in items]
@@ -240,6 +252,6 @@ class OpenOcdRpc:
         self._send_command_locked('array unset %s' % self._array_var_name)
         self._send_command_locked('array set %s { %s }' %
                                   (self._array_var_name, array))
-        self._send_command_locked(
-            'array2mem %s %d 0x%x %d' %
-            (self._array_var_name, width, address, count))
+        self._send_command_locked('array2mem %s %d 0x%x %d' %
+                                  (self._array_var_name, width, address,
+                                   count))
