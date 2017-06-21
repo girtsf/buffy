@@ -144,6 +144,9 @@ class OpenOcdRpc:
     def _read_word_locked(self, address):
         """Reads a 32-bit word from given address."""
         out = self._send_command_locked('ocd_mdw 0x%x' % address)
+        while out.startswith(b'DAP'):
+            out = self._send_command_locked('ocd_mdw 0x%x' % address)
+
         # Return format:
         # 0x20002000: 00000000
         if out.count(b':') != 1:
