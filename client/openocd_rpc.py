@@ -30,7 +30,7 @@ class OpenOcdRpc:
                  verbose=False,
                  timeout=2,
                  array_var_name='_rpc_array',
-                 ignore_regexps=[]):
+                 ignore_regexps=None):
         """Initializes openocd interface.
 
         Args:
@@ -57,7 +57,7 @@ class OpenOcdRpc:
         self._verbose = verbose
         self._timeout = timeout
         self._array_var_name = array_var_name
-        self._ignore_regexps = ignore_regexps
+        self._ignore_regexps = ignore_regexps or []
 
         self._sock = socket.create_connection(('localhost', port),
                                               self._timeout)
@@ -98,6 +98,13 @@ class OpenOcdRpc:
         """Sends given command, returns the response as bytes."""
         with self._lock:
             return self._send_command_locked(cmd, timeout=timeout)
+
+    def _should_ignore(self, line):
+        line = line.decode('utf-8')
+        for regexp in self._ignore_regexps:
+            if re.match(regexp, line):
+                return True
+        return False
 
     def _send_command_locked(self, cmd, timeout=None):
         if not self._prepared:
@@ -140,24 +147,17 @@ class OpenOcdRpc:
             else:
                 received.append(tmp)
         out = b''.join(received)
+        out = b'\n'.join(
+            line for line in out.split(b'\n') if not self._should_ignore(line))
         return out
 
     def read_word(self, address):
         with self._lock:
             return self._maybe_retry(self._read_word_locked, address)
 
-    def _should_ignore(self, line):
-        line = line.decode('utf-8')
-        for regexp in self._ignore_regexps:
-            if re.match(regexp, line):
-                return True
-        return False
-
     def _read_word_locked(self, address):
         """Reads a 32-bit word from given address."""
         out = self._send_command_locked('ocd_mdw 0x%x' % address)
-        while self._should_ignore(out):
-            out = self._send_command_locked('ocd_mdw 0x%x' % address)
 
         # Return format:
         # 0x20002000: 00000000

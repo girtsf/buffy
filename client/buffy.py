@@ -383,7 +383,7 @@ if __name__ == '__main__':
         dest='verbose',
         action='store_true',
         help='Whether to print debug info')
-    parser.set_defaults(ignore_regexp=[], verbose=False)
+    parser.set_defaults(verbose=False)
     args = parser.parse_args()
 
     rpc = openocd_rpc.OpenOcdRpc(
