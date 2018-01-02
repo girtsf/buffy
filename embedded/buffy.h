@@ -11,23 +11,24 @@
 #define BUFFY_RX_BUF_SIZE 64
 #endif
 
-#define BUFFY_MAGIC 0xdd664662  // bFfY'
+// First version of buffy used 0xdd664662.
+//
+// The new version now also includes a version field in the structure.
+#define BUFFY_MAGIC 0xdd664642  // BFfY'
 
 struct buffy {
-  const uint32_t magic;
-  // TX buffer size as log2 of the size.
-  const uint32_t tx_len_pow2;
-  // RX buffer size as log2 of the size.
-  const uint32_t rx_len_pow2;
-  // Head/tail location as index into the buffers.
-  volatile uint32_t tx_tail;
-  volatile uint32_t tx_head;
-  volatile uint32_t rx_tail;
-  volatile uint32_t rx_head;
-  volatile uint32_t tx_overflow_counter;
-  // Buffers themselves.
-  uint8_t tx_buf[BUFFY_TX_BUF_SIZE];
-  uint8_t rx_buf[BUFFY_RX_BUF_SIZE];
+  const uint32_t magic;       // 0
+  const uint8_t version;      // 4
+  const uint8_t tx_len_pow2;  // 5 - TX buffer size as log2 of the size.
+  const uint8_t rx_len_pow2;  // 6 - RX buffer size as log2 of the size.
+  const uint8_t initialized;  // 7
+  volatile uint32_t tx_tail;  // 8 - heads/tails as indexes.
+  volatile uint32_t tx_head;  // 12
+  volatile uint32_t rx_tail;  // 16
+  volatile uint32_t rx_head;  // 20
+  volatile uint32_t tx_overflow_counter;  // 24
+  uint8_t* tx_buf;                        // 28 - pointer to tx buffer.
+  uint8_t* rx_buf;                        // 32 - pointer to rx buffer.
 };
 
 // Transmit buffer: from embedded to host.
@@ -64,9 +65,13 @@ int buffy_tx_get_buffer_free(struct buffy* t);
 // Returns the number of characters received.
 int buffy_rx(struct buffy* t, char* buf, int len);
 
+// Macro to instantiate a buffy structure + rx and tx buffers.
 #define INSTANTIATE_BUFFY(name)                                 \
+  static uint8_t name##_tx_buf[BUFFY_TX_BUF_SIZE];              \
+  static uint8_t name##_rx_buf[BUFFY_RX_BUF_SIZE];              \
   static struct buffy name = {                                  \
       .magic = BUFFY_MAGIC,                                     \
+      .version = 1,                                             \
       .tx_len_pow2 = 32 - 1 - __builtin_clz(BUFFY_TX_BUF_SIZE), \
       .rx_len_pow2 = 32 - 1 - __builtin_clz(BUFFY_RX_BUF_SIZE), \
       .tx_tail = 0,                                             \
@@ -74,4 +79,29 @@ int buffy_rx(struct buffy* t, char* buf, int len);
       .rx_tail = 0,                                             \
       .rx_head = 0,                                             \
       .tx_overflow_counter = 0,                                 \
+      .version = 1,                                             \
+      .tx_buf = name##_tx_buf,                                  \
+      .rx_buf = name##_rx_buf,                                  \
+  };
+
+// Macro to instantiate structure and buffers, placing the structure in
+// a particular linker section.
+//
+// This might be useful to place the buffy struct before other .data. That way,
+// it will always end up at same address, making it easier to find.
+#define INSTANTIATE_BUFFY_IN_SECTION(name, linker_section)              \
+  static uint8_t name##_tx_buf[BUFFY_TX_BUF_SIZE];                      \
+  static uint8_t name##_rx_buf[BUFFY_RX_BUF_SIZE];                      \
+  __attribute__((section(linker_section))) static struct buffy name = { \
+      .magic = BUFFY_MAGIC,                                             \
+      .version = 1,                                                     \
+      .tx_len_pow2 = 32 - 1 - __builtin_clz(BUFFY_TX_BUF_SIZE),         \
+      .rx_len_pow2 = 32 - 1 - __builtin_clz(BUFFY_RX_BUF_SIZE),         \
+      .tx_tail = 0,                                                     \
+      .tx_head = 0,                                                     \
+      .rx_tail = 0,                                                     \
+      .rx_head = 0,                                                     \
+      .tx_overflow_counter = 0,                                         \
+      .tx_buf = name##_tx_buf,                                          \
+      .rx_buf = name##_rx_buf,                                          \
   };
